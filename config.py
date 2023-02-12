@@ -31,7 +31,7 @@ def get_args():
 
     parser.add_argument('--dataset', type=str, default='CIFAR10', help='CIFAR10, CIFAR100, MNIST')
     parser.add_argument('--model-name', type=str, default='ResNet26', help='ResNet26, ResNet38, ResNet50')
-    parser.add_argument('--img-size', type=int, default=32)
+    parser.add_argument('--img-size', type=int, default=108)
     parser.add_argument('--batch-size', type=int, default=25)
     parser.add_argument('--num-workers', type=int, default=0)
     parser.add_argument('--epochs', type=int, default=100)
