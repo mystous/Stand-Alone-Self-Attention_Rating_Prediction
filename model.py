@@ -56,7 +56,7 @@ class Model(nn.Module):
         if stem:
             self.init = nn.Sequential(
                 # CIFAR10
-                AttentionStem(in_channels=3, out_channels=64, kernel_size=4, stride=1, padding=2, groups=1),
+                AttentionStem(in_channels=1, out_channels=64, kernel_size=4, stride=1, padding=2, groups=1),
                 nn.BatchNorm2d(64),
                 nn.ReLU(),
 
@@ -69,7 +69,7 @@ class Model(nn.Module):
         else:
             self.init = nn.Sequential(
                 # CIFAR10
-                nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
+                nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1, bias=False),
                 nn.BatchNorm2d(64),
                 nn.ReLU(),
 
