@@ -10,7 +10,16 @@ import shutil
 from config import get_args, get_logger
 from model import ResNet50, ResNet38, ResNet26
 from preprocess import load_data
+from torchvision import datasets, transforms
+from torch.utils.data.dataset import random_split
+from torch.utils.data import Dataset
+import pandas as pd
+import numpy as np
 
+import gc
+
+gc.collect()
+torch.cuda.empty_cache()
 
 def adjust_learning_rate(optimizer, epoch, args):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
@@ -74,15 +83,59 @@ def get_model_parameters(model):
         total_parameters += layer_parameter
     return total_parameters
 
+class MDSMDataset(Dataset):
+    def __init__(self, mdsmdata_file):
+        self.df = pd.read_csv(mdsmdata_file)
+        rating = self.df[['ReviewID', 'reviewStar']]
+        self.rating = rating.drop_duplicates('ReviewID')
+        self.height = self.df['ReviewID'].value_counts().max()
+        
+        mdsm_body = self.df.drop(['reviewNo', 'reviewStar'], axis=1)
+        mdsm_body['imageCnt'] = (mdsm_body['imageCnt'] - mdsm_body['imageCnt'].min())/ (mdsm_body['imageCnt'].max() - mdsm_body['imageCnt'].min())
+        mdsm_body['helpfulCnt'] = (mdsm_body['helpfulCnt'] - mdsm_body['helpfulCnt'].mean())/ mdsm_body['helpfulCnt'].std()
+        body_height, body_width = mdsm_body.shape;
+        #self.width = body_width - 1
+        self.width = self.height
+        
+        dummy_mdsd = np.zeros((body_height, self.height, self.width), np.float32)
+        mdsm_index = np.zeros(self.rating['ReviewID'].max()+1, int)
+        mdsm_count = np.zeros(self.rating['ReviewID'].max()+1, int)
+        mdsm_index.fill(-1)
+        
+        max_index = int(0)
+        for index, body in mdsm_body.iterrows():
+            dummy_index = max_index
+            if mdsm_index[int(body['ReviewID'])] != -1:
+                dummy_index = mdsm_index[int(body['ReviewID'])]
+            else:
+                mdsm_index[int(body['ReviewID'])] = dummy_index
+                max_index = max_index + 1
+           
+            dummy_mdsd[dummy_index, mdsm_count[dummy_index]] = np.pad(body.drop('ReviewID'), (0,self.width - body_width + 1), 'constant', constant_values=0)
+           # dummy_mdsd[dummy_index, mdsm_count[dummy_index]] = body.drop('ReviewID')
+            mdsm_count[dummy_index] = mdsm_count[dummy_index] + 1
+
+        self.mdsm_body = dummy_mdsd
+
+    def __len__(self):
+        return self.rating.shape[0]
+
+    def __getitem__(self, idx):
+        _tensor = torch.tensor(self.mdsm_body[idx])
+        rtn_tensor = _tensor.unsqueeze(0)
+        return rtn_tensor, self.rating.iloc[idx, 1]
 
 def main(args, logger):
-    train_loader, test_loader = load_data(args)
-    if args.dataset == 'CIFAR10':
-        num_classes = 10
-    elif args.dataset == 'CIFAR100':
-        num_classes = 100
-    elif args.dataset == 'IMAGENET':
-        num_classes = 1000
+    num_classes = 5
+    dataset = MDSMDataset('amazon_hmdvr_df_tokenized_sentiment_score_extended.csv')
+
+    train_size = len(dataset) * 0.8
+    test_size = len(dataset) - train_size
+
+    train_dataset, test_dataset = random_split(dataset, [int(train_size),int(test_size)])
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size = 50, shuffle=True, num_workers=0)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size = 50, shuffle=True, num_workers=0)
 
     print('img_size: {}, num_classes: {}, stem: {}'.format(args.img_size, num_classes, args.stem))
     if args.model_name == 'ResNet26':
